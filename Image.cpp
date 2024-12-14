@@ -3,68 +3,73 @@
 #include <algorithm>
 #include <vector>
 
+/*
+Utilisez la commande ici pour exécuter ce fichier:
+g++ Image.cpp -o ImageAvecFiltrage `pkg-config --cflags --libs opencv4`
+*/
+
 //--------------------------
-// 中值滤波函数（手动实现）
-// input: 灰度图像
-// kernelSize: 滤波器核大小(奇数)
-// 无符号字符类型（unsigned char）uchar存储
+// Main Fonction de filtrage médian (implémentation manuelle)
+// input: image en niveaux de gris
+// kernelSize: taille du noyau du filtre (impair)
+// Type uchar pour stocker les valeurs (unsigned char)
 //--------------------------
 cv::Mat medianFilter(const cv::Mat &input, int kernelSize) {
-    CV_Assert(input.channels() == 1); // 简化：只处理单通道灰度图像，该断言用于确保输入图像是单通道，即灰度图像。如果输入图像不是单通道，程序将中断，以免在后续处理中出现通道处理的混乱。
-    CV_Assert(kernelSize % 2 == 1);   // 只接受核大小必须为奇数
+    CV_Assert(input.channels() == 1); // Simplification : ne traite que les images en niveaux de gris
+    CV_Assert(kernelSize % 2 == 1);   // Accepte uniquement une taille de noyau impaire
 
-    int Kradius = kernelSize / 2; // 将核大小除以2可获得核半径（Kradius）（框的一半）
-    cv::Mat output = input.clone(); //clone保证了输出图像初始值与输入图像相同
+    int Kradius = kernelSize / 2; // Rayon du noyau (moitié de la taille du noyau)
+    cv::Mat output = input.clone(); // Clone pour initialiser la sortie avec les mêmes valeurs que l’image d’entrée
 
-    //避免在图像边缘处获取邻域像素时发生越界
+    // Évite de dépasser les bords de l’image lors de la récupération des pixels voisins
     for (int y = Kradius; y < input.rows - Kradius; y++) {
         for (int x = Kradius; x < input.cols - Kradius; x++) {
-            //neighbors是一个向量（动态数组），用于存储当前像素 (y, x)邻域内所有像素的灰度值
-            std::vector<uchar> neighbors;  
-            //预先分配内存，以避免在随后的数据插入中频繁分配空间例如3*3，提高性能。
+            // Utilisation d'un vecteur pour stocker les pixels du voisinage de (y, x)
+            std::vector<uchar> neighbors;
+            // Pré-allocation pour optimiser les performances
             neighbors.reserve(kernelSize * kernelSize);
 
-            //这两个内层循环用于遍历 (y, x)像素的邻域区域。
+            // Parcourir la région de voisinage autour du pixel (y, x)
             for (int j = -Kradius; j <= Kradius; j++) {
                 for (int i = -Kradius; i <= Kradius; i++) {
                     neighbors.push_back(input.at<uchar>(y + j, x + i));
                 }
             }
-            //一旦收集了所有邻域像素值，将其排序（从小到大）
+            // Trier les valeurs du voisinage (ordre croissant)
             std::sort(neighbors.begin(), neighbors.end()); 
-            //排序后的 neighbors 中间位置的元素即为中值。
+            // La médiane est la valeur au centre du vecteur trié
             uchar medianVal = neighbors[neighbors.size()/2];
-            //将中值 medianVal赋予输出图像 output中对应位置 (y, x)的像素，使该像素的值由原来的值变为邻域中值，从而完成中值滤波操作。
+            // Affecter la valeur médiane au pixel (y, x) dans l’image de sortie
             output.at<uchar>(y, x) = medianVal;
         }
     }
 
-    //函数返回中值滤波后的图像 output
+    // Retourne l'image filtrée
     return output;
 }
 
 //--------------------------------
-// 通用卷积函数（适用于单通道灰度图）
-// I * H，其中H为LxL核
-// input：输入图像 (I)，类型为 cv::Mat，要求是单通道（灰度图）。
-// kernel：卷积核 (H)，也是 cv::Mat 类型，要求是奇数大小（如3×3、5×5）L*L
-// 输出：返回卷积后的图像，类型为 cv::Mat。
+// Main Fonction de convolution (pour images en niveaux de gris)
+// I * H, où H est un noyau de taille LxL
+// input: image d'entrée (I), de type cv::Mat, en niveaux de gris
+// kernel: noyau de convolution (H), également de type cv::Mat
+// Retourne: l'image convoluée, de type cv::Mat
 //--------------------------------
 cv::Mat convolve(const cv::Mat &input, const cv::Mat &kernel) {
     CV_Assert(input.channels() == 1);
-    // 验证 kernel 是否是方形矩阵，且边长为奇数
+    // Vérifie que le noyau est une matrice carrée et que la taille est impaire
     CV_Assert(kernel.rows == kernel.cols && kernel.rows % 2 == 1);
 
-    //确定卷积核的半径，用于确定滑动窗口的范围
+    // Détermine le rayon du noyau pour définir la fenêtre glissante
     int Kradius = kernel.rows / 2;
-    cv::Mat output = cv::Mat::zeros(input.size(), CV_32F); // 先用float存储中间结果,初始化为全零矩阵
+    cv::Mat output = cv::Mat::zeros(input.size(), CV_32F); // Initialise une matrice de zéros pour stocker les résultats intermédiaires
     
-    // 卷积计算
-    // 遍历图像中每个有效的像素点
+    // Calcul de la convolution
+    // Parcourir chaque pixel valide de l'image
     for (int y = Kradius; y < input.rows - Kradius; y++) {
         for (int x = Kradius; x < input.cols - Kradius; x++) {
             float sum = 0.0f;
-            // 遍历以当前像素为中心的邻域区域L*L
+            // Parcourir la région de voisinage centrée sur le pixel (y, x)
             for (int j = -Kradius; j <= Kradius; j++) {
                 for (int i = -Kradius; i <= Kradius; i++) {
                     float val = static_cast<float>(input.at<uchar>(y + j, x + i));
@@ -76,7 +81,7 @@ cv::Mat convolve(const cv::Mat &input, const cv::Mat &kernel) {
         }
     }
 
-    // 将结果转换为8位图像
+    // Convertit les résultats en une image 8 bits
     cv::Mat finalOutput;
     output.convertTo(finalOutput, CV_8U, 1.0, 0.0);
 
@@ -84,41 +89,51 @@ cv::Mat convolve(const cv::Mat &input, const cv::Mat &kernel) {
 }
 
 //------------------------
-// 均值核生成函数，用于卷积
-// size: 核大小(奇数)
+// Fonction de création d'un noyau moyen
+// size: taille du noyau (impair)
+// Objectif : calculer la moyenne des pixels voisins pour réduire le bruit
 //------------------------
 cv::Mat createMeanKernel(int size) {
     CV_Assert(size % 2 == 1);
+    // Crée une matrice de taille size×size remplie de 1
     cv::Mat kernel = cv::Mat::ones(size, size, CV_32F);
+    // Divise chaque élément de la matrice par size×size pour normaliser
     kernel = kernel / (float)(size*size);
     return kernel;
 }
 
 //------------------------
-// 高斯核生成函数(简化版本)
-// size: 核大小(奇数)
-// sigma: 标准差
+// Fonction de création d'un noyau gaussien (version simplifiée)
+// size: taille du noyau (impair)
+// sigma: écart-type
 //------------------------
 cv::Mat createGaussianKernel(int size, float sigma) {
     CV_Assert(size % 2 == 1);
     cv::Mat kernel = cv::Mat::zeros(size, size, CV_32F);
-    int radius = size / 2;
+    // Le rayon du noyau définit la taille de la région de voisinage
+    int Kradius = size / 2;
     float sum = 0.0f;
-    for (int y = -radius; y <= radius; y++) {
-        for (int x = -radius; x <= radius; x++) {
+    // Calcul des poids gaussiens
+    for (int y = -Kradius; y <= Kradius; y++) {
+        for (int x = -Kradius; x <= Kradius; x++) {
+            // Formule discrète du noyau gaussien
             float val = std::exp(-(x*x + y*y)/(2*sigma*sigma));
-            kernel.at<float>(y+radius, x+radius) = val;
+            // Stocke les valeurs calculées dans la matrice correspondante
+            kernel.at<float>(y+Kradius, x+Kradius) = val;
             sum += val;
         }
     }
+    // Normalisation pour que la somme des éléments du noyau soit égale à 1
     kernel = kernel / sum;
     return kernel;
 }
 
 //------------------------
-// 拉普拉斯核 (3x3简单版本)
+// Fonction de création d'un noyau Laplacien (3x3, version simplifiée)
+// Utilisé principalement pour la détection des contours
 //------------------------
 cv::Mat createLaplacianKernel() {
+    // Initialisation d'une matrice 3×3 avec les valeurs du noyau Laplacien
     cv::Mat kernel = (cv::Mat_<float>(3,3) << 
         0,  1, 0,
         1, -4, 1,
@@ -127,7 +142,7 @@ cv::Mat createLaplacianKernel() {
 }
 
 //------------------------
-// Sobel核 (水平Sobel)
+// Fonction de création d'un noyau Sobel (horizontal)
 //------------------------
 cv::Mat createSobelKernelX() {
     cv::Mat kernel = (cv::Mat_<float>(3,3) << 
@@ -138,7 +153,7 @@ cv::Mat createSobelKernelX() {
 }
 
 //------------------------
-// Sobel核 (垂直Sobel)
+// Fonction de création d'un noyau Sobel (vertical)
 //------------------------
 cv::Mat createSobelKernelY() {
     cv::Mat kernel = (cv::Mat_<float>(3,3) << 
@@ -149,75 +164,95 @@ cv::Mat createSobelKernelY() {
 }
 
 int main(int argc, char** argv) {
-    // 读取输入图像为灰度图（请保证当前目录下有 input.png）
-    cv::Mat input = cv::imread("input.png", cv::IMREAD_GRAYSCALE);
+    // Interface de ligne de commande simple
+    std::string imageName;
+    std::cout << "Entrez le nom du fichier image dans le répertoire Donnee (par exemple, Autre.png) : ";
+    std::cin >> imageName;
+
+    // Ajouter le chemin du répertoire Donnee au nom du fichier
+    std::string imagePath = "Donnee/" + imageName;
+
+    cv::Mat input = cv::imread(imagePath, cv::IMREAD_GRAYSCALE);
     if (input.empty()) {
-        std::cerr << "Error: Impossible de charger l'image ! input.png" << std::endl;
+        std::cerr << "Erreur : Impossible de charger l'image : " << imagePath << std::endl;
         return -1;
     }
 
-    // 1. 中值滤波
-    cv::Mat medianResult = medianFilter(input, 3);
+    std::cout << "Veuillez sélectionner le type de filtre : \n";
+    std::cout << "1: median\n2: mean\n3: gaussian\n4: laplacian\n5: sobelX\n6: sobelY\n";
+    int choice;
+    std::cin >> choice;
 
-    // 2. 卷积操作示例
-    // a) 均值滤波 (3x3)
-    cv::Mat meanKernel = createMeanKernel(3);
-    cv::Mat meanResult = convolve(input, meanKernel);
+    cv::Mat result;
+    std::string resultName;
 
-    // b) 高斯滤波 (5x5, sigma=1.0)
-    cv::Mat gaussKernel = createGaussianKernel(5, 1.0f);
-    cv::Mat gaussResult = convolve(input, gaussKernel);
+    switch (choice) {
+        case 1: {
+            // Filtrage médian
+            int ksize;
+            std::cout << "Veuillez saisir la taille du noyau du filtre médian (impaire, par exemple 3) : ";
+            std::cin >> ksize;
+            result = medianFilter(input, ksize);
+            resultName = "median_result.png";
+            break;
+        }
+        case 2: {
+            // Filtrage moyen
+            int ksize;
+            std::cout << "Veuillez saisir la taille moyenne du noyau du filtre (impaire, par exemple 3) : ";
+            std::cin >> ksize;
+            cv::Mat meanKernel = createMeanKernel(ksize);
+            result = convolve(input, meanKernel);
+            resultName = "mean_result.png";
+            break;
+        }
+        case 3: {
+            // Filtrage gaussien
+            int ksize;
+            float sigma;
+            std::cout << "Veuillez saisir la taille du noyau du filtre gaussien (impaire, par exemple 5) : ";
+            std::cin >> ksize;
+            std::cout << "Veuillez saisir le sigma du noyau gaussien (par exemple 1,0) : ";
+            std::cin >> sigma;
+            cv::Mat gaussKernel = createGaussianKernel(ksize, sigma);
+            result = convolve(input, gaussKernel);
+            resultName = "gaussian_result.png";
+            break;
+        }
+        case 4: {
+            // Laplacien
+            cv::Mat lapKernel = createLaplacianKernel();
+            result = convolve(input, lapKernel);
+            resultName = "laplacian_result.png";
+            break;
+        }
+        case 5: {
+            // Sobel X
+            cv::Mat sobelXKernel = createSobelKernelX();
+            result = convolve(input, sobelXKernel);
+            resultName = "sobel_x_result.png";
+            break;
+        }
+        case 6: {
+            // Sobel Y
+            cv::Mat sobelYKernel = createSobelKernelY();
+            result = convolve(input, sobelYKernel);
+            resultName = "sobel_y_result.png";
+            break;
+        }
+        default:
+            std::cerr << "Choix non valide." << std::endl;
+            return -1;
+    }
 
-    // 拉普拉斯滤波
-    cv::Mat lapKernel = createLaplacianKernel();
-    cv::Mat lapResult = convolve(input, lapKernel);
-
-    // Sobel滤波 (水平和垂直方向)
-    cv::Mat sobelXKernel = createSobelKernelX();
-    cv::Mat sobelYKernel = createSobelKernelY();
-    cv::Mat sobelXResult = convolve(input, sobelXKernel);
-    cv::Mat sobelYResult = convolve(input, sobelYKernel);
-
-    // 显示结果
+    // Afficher le résultat
     cv::imshow("Original", input);
-    cv::imshow("Median Filtered", medianResult);
-    cv::imshow("Mean Filtered", meanResult);
-    cv::imshow("Gaussian Filtered", gaussResult);
-    cv::imshow("Laplacian Filtered", lapResult);
-    cv::imshow("Sobel X", sobelXResult);
-    cv::imshow("Sobel Y", sobelYResult);
-
+    cv::imshow("Result", result);
     cv::waitKey(0);
 
-    // 保存结果
-    cv::imwrite("median_result.png", medianResult);
-    cv::imwrite("mean_result.png", meanResult);
-    cv::imwrite("gaussian_result.png", gaussResult);
-    cv::imwrite("laplacian_result.png", lapResult);
-    cv::imwrite("sobel_x_result.png", sobelXResult);
-    cv::imwrite("sobel_y_result.png", sobelYResult);
+    // Sauvegarde du résultat
+    cv::imwrite(resultName, result);
+    std::cout << "Les résultats de ce traitement ont été enregistrés en tant que : " << resultName << std::endl;
 
     return 0;
 }
-
-/*
-这是一个完整的示例代码（main.cpp），包括：
-
-使用OpenCV导入图像(cv::imread)
-显示图像(cv::imshow)
-保存处理结果(cv::imwrite)
-实现中值滤波函数
-实现通用卷积函数以及均值、高斯、拉普拉斯、Sobel核的使用
-请根据自己的环境安装OpenCV，并确保编译链接正确。下方给出的编译命令仅为示例，请根据实际路径调整。
-
-说明：
-medianFilter函数实现了基本的中值滤波：对每个像素取其邻域内像素的中值作为新值。
-convolve函数则是通用的卷积函数。通过传入不同的核（均值、高斯、拉普拉斯、Sobel核）即可实现不同的滤波效果。
-createMeanKernel, createGaussianKernel, createLaplacianKernel, createSobelKernelX, createSobelKernelY 函数用于快速生成相应滤波核。
-convolve函数中最终输出使用convertTo转为CV_8U。在特定核的场合（如均值或高斯核），理论上卷积结果应天然在0-255范围内（若输入在此范围内），但对差分类核（如拉普拉斯、Sobel）结果可能出现负值，因此这里简单使用convertTo对输出进行一次线性映射。实际应用中可能需要根据需求进行截断或归一化处理。
-
-通过上述代码，即完成了必需的实现：
-中值滤波：减少脉冲噪声
-卷积及其应用（均值滤波、高斯滤波、拉普拉斯和Sobel边缘检测）
-并提供了与OpenCV函数对比的可能（如cv::medianBlur或cv::filter2D）。
-*/
